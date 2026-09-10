@@ -1,65 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import MapView from "./components/MapView";
+import { startEmergency as apiStartEmergency } from "./services/api";
+import { useAmbulanceTracking } from "./hooks/useAmbulanceTracking";
 
-import {
-  MapContainer,
-  TileLayer,
-  Polyline,
-  Marker,
-  Popup,
-  useMap
-} from "react-leaflet";
-
-import "leaflet/dist/leaflet.css";
-
-
-const API_URL = "http://127.0.0.1:8000";
-
-
-// ============================================================
-// MAP FOLLOWER
-// ============================================================
-
-function MapFollower({ ambulanceLocation }) {
-
-  const map = useMap();
-
-  useEffect(() => {
-
-    if (!ambulanceLocation) {
-      return;
-    }
-
-    const latitude =
-      Number(ambulanceLocation.latitude);
-
-    const longitude =
-      Number(ambulanceLocation.longitude);
-
-    if (
-      Number.isNaN(latitude) ||
-      Number.isNaN(longitude)
-    ) {
-      return;
-    }
-
-    map.panTo(
-      [
-        latitude,
-        longitude
-      ],
-      {
-        animate: true,
-        duration: 0.8
-      }
-    );
-
-  }, [
-    ambulanceLocation,
-    map
-  ]);
-
-  return null;
-}
 
 
 // ============================================================
@@ -69,367 +12,140 @@ function MapFollower({ ambulanceLocation }) {
 function App() {
 
   // ==========================================================
-  // STATE
+  // STATE (With Session Persistence for Mid-Emergency Refresh)
   // ==========================================================
 
-  const [ambulanceId, setAmbulanceId] =
-    useState("AMB-001");
+  const [ambulanceId, setAmbulanceId] = useState(() => {
+    return sessionStorage.getItem("emergency_ambulanceId") || "AMB-001";
+  });
 
-  const [startLatitude, setStartLatitude] =
-    useState("");
+  const [startLatitude, setStartLatitude] = useState(() => {
+    return sessionStorage.getItem("emergency_startLat") || "";
+  });
 
-  const [startLongitude, setStartLongitude] =
-    useState("");
+  const [startLongitude, setStartLongitude] = useState(() => {
+    return sessionStorage.getItem("emergency_startLng") || "";
+  });
 
-  const [hospitalId, setHospitalId] =
-    useState("HOSP-001");
+  const [hospitalId, setHospitalId] = useState(() => {
+    return sessionStorage.getItem("emergency_hospitalId") || "HOSP-001";
+  });
 
-  const [result, setResult] =
-    useState(null);
+  const [result, setResult] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("emergency_result");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
-  const [loading, setLoading] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const [error, setError] =
-    useState("");
+  // Save values to sessionStorage for refresh tolerance
+  const saveSession = (newResult, ambId, lat, lng, hospId) => {
+    if (newResult) {
+      sessionStorage.setItem("emergency_result", JSON.stringify(newResult));
+      sessionStorage.setItem("emergency_ambulanceId", ambId);
+      sessionStorage.setItem("emergency_startLat", lat);
+      sessionStorage.setItem("emergency_startLng", lng);
+      sessionStorage.setItem("emergency_hospitalId", hospId);
+    } else {
+      sessionStorage.removeItem("emergency_result");
+    }
+  };
 
-  const [ambulanceLocation, setAmbulanceLocation] =
-    useState(null);
-
+  const resetEmergency = () => {
+    setResult(null);
+    setError("");
+    sessionStorage.removeItem("emergency_result");
+  };
 
   // ==========================================================
   // GET CURRENT LOCATION
   // ==========================================================
 
   const useCurrentLocation = () => {
-
     setError("");
 
     if (!navigator.geolocation) {
-
-      setError(
-        "Geolocation is not supported by this browser."
-      );
-
+      setError("Geolocation is not supported by this browser.");
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-
       (position) => {
-
-        setStartLatitude(
-          position.coords.latitude.toFixed(6)
-        );
-
-        setStartLongitude(
-          position.coords.longitude.toFixed(6)
-        );
-
+        const lat = position.coords.latitude.toFixed(6);
+        const lng = position.coords.longitude.toFixed(6);
+        setStartLatitude(lat);
+        setStartLongitude(lng);
+        sessionStorage.setItem("emergency_startLat", lat);
+        sessionStorage.setItem("emergency_startLng", lng);
       },
-
       (locationError) => {
-
-        console.error(
-          "Location error:",
-          locationError
-        );
-
+        console.error("Location error:", locationError);
         setError(
-          "Unable to get your current location. Please enter the coordinates manually."
+          "Unable to get your current location. Please enter coordinates manually."
         );
-
       }
-
     );
-
   };
 
-
   // ==========================================================
-  // FETCH AMBULANCE TRACKING
-  // ==========================================================
-
-  const fetchAmbulanceTracking = async (
-    currentAmbulanceId
-  ) => {
-
-    if (!currentAmbulanceId) {
-      return;
-    }
-
-    try {
-
-      const response = await fetch(
-        `${API_URL}/tracking/${currentAmbulanceId}`
-      );
-
-      if (response.status === 404) {
-
-        console.log(
-          `Tracking not started for ${currentAmbulanceId}`
-        );
-
-        return;
-      }
-
-      if (!response.ok) {
-
-        const errorText =
-          await response.text();
-
-        throw new Error(
-          errorText ||
-          "Failed to fetch ambulance tracking."
-        );
-
-      }
-
-      const data =
-        await response.json();
-
-      console.log(
-        "Ambulance tracking:",
-        data
-      );
-
-      const latitude =
-        Number(data.latitude);
-
-      const longitude =
-        Number(data.longitude);
-
-      if (
-        Number.isNaN(latitude) ||
-        Number.isNaN(longitude)
-      ) {
-
-        console.error(
-          "Invalid ambulance coordinates:",
-          data
-        );
-
-        return;
-      }
-
-      setAmbulanceLocation({
-
-        latitude:
-          latitude,
-
-        longitude:
-          longitude
-
-      });
-
-    }
-
-    catch (trackingError) {
-
-      console.error(
-        "Ambulance tracking error:",
-        trackingError
-      );
-
-    }
-
-  };
-
-
-  // ==========================================================
-  // AUTOMATIC AMBULANCE TRACKING
+  // AMBULANCE TRACKING HOOK
   // ==========================================================
 
-  useEffect(() => {
-
-    if (!result) {
-      return;
-    }
-
-    if (!ambulanceId) {
-      return;
-    }
-
-    console.log(
-      `Automatic tracking started for ${ambulanceId}`
-    );
-
-    fetchAmbulanceTracking(
-      ambulanceId
-    );
-
-    const trackingInterval =
-      setInterval(() => {
-
-        fetchAmbulanceTracking(
-          ambulanceId
-        );
-
-      }, 5000);
-
-    return () => {
-
-      console.log(
-        `Automatic tracking stopped for ${ambulanceId}`
-      );
-
-      clearInterval(
-        trackingInterval
-      );
-
-    };
-
-  }, [
-    result,
-    ambulanceId
-  ]);
-
+  const { ambulanceLocation, trackingStatus, trackingError } = useAmbulanceTracking(
+    ambulanceId,
+    Boolean(result)
+  );
 
   // ==========================================================
   // START EMERGENCY
   // ==========================================================
 
   const startEmergency = async () => {
-
     setError("");
 
-    setResult(null);
-
-    setAmbulanceLocation(null);
-
-    if (
-      !startLatitude ||
-      !startLongitude
-    ) {
-
-      setError(
-        "Please enter the ambulance starting location."
-      );
-
+    if (!startLatitude || !startLongitude) {
+      setError("Please enter the ambulance starting location.");
       return;
     }
 
-    const latitude =
-      Number(startLatitude);
+    const latitude = Number(startLatitude);
+    const longitude = Number(startLongitude);
 
-    const longitude =
-      Number(startLongitude);
-
-    if (
-      Number.isNaN(latitude) ||
-      Number.isNaN(longitude)
-    ) {
-
-      setError(
-        "Latitude and longitude must be valid numbers."
-      );
-
+    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      setError("Latitude and longitude must be valid numbers.");
       return;
     }
 
     setLoading(true);
 
     try {
+      const data = await apiStartEmergency({
+        ambulance_id: ambulanceId,
+        ambulance_latitude: latitude,
+        ambulance_longitude: longitude,
+        destination_hospital_id: hospitalId
+      });
 
-      const response = await fetch(
-        `${API_URL}/emergency/start`,
-        {
-
-          method: "POST",
-
-          headers: {
-            "Content-Type": "application/json"
-          },
-
-          body: JSON.stringify({
-
-            ambulance_id:
-              ambulanceId,
-
-            ambulance_latitude:
-              latitude,
-
-            ambulance_longitude:
-              longitude,
-
-            destination_hospital_id:
-              hospitalId
-
-          })
-
-        }
-      );
-
-      if (!response.ok) {
-
-        const errorText =
-          await response.text();
-
-        let errorMessage =
-          "Emergency request failed.";
-
-        try {
-
-          const errorData =
-            JSON.parse(errorText);
-
-          errorMessage =
-            errorData.detail ||
-            errorMessage;
-
-        }
-
-        catch {
-
-          errorMessage =
-            errorText ||
-            errorMessage;
-
-        }
-
-        throw new Error(
-          errorMessage
-        );
-
-      }
-
-      const data =
-        await response.json();
-
-      console.log(
-        "Emergency response:",
-        data
-      );
-
+      console.log("Emergency response:", data);
       setResult(data);
-
-      await fetchAmbulanceTracking(
-        ambulanceId
-      );
-
-    }
-
-    catch (error) {
-
-      console.error(
-        "Emergency error:",
-        error
-      );
-
-      setError(
-        error.message ||
-        "Unable to process emergency."
-      );
-
-    }
-
-    finally {
-
+      saveSession(data, ambulanceId, startLatitude, startLongitude, hospitalId);
+    } catch (err) {
+      console.error("Emergency start failed:", err);
+      const friendlyMsg =
+        err.message === "Failed to fetch" || err.message?.includes("Unable to reach server")
+          ? "Unable to reach server. Please ensure the backend is running at http://127.0.0.1:8000."
+          : (err.message || "Unable to process emergency request.");
+      setError(friendlyMsg);
+    } finally {
       setLoading(false);
-
     }
-
   };
+
 
 
   // ==========================================================
@@ -747,14 +463,29 @@ function App() {
           </button>
 
 
+          {result && (
+            <button
+              onClick={resetEmergency}
+              style={{
+                marginTop: "12px",
+                width: "100%",
+                padding: "10px",
+                background: "#f3f4f6",
+                color: "#4b5563",
+                border: "1px solid #d1d5db",
+                borderRadius: "6px",
+                fontWeight: 600,
+                cursor: "pointer"
+              }}
+            >
+              🔄 Reset Emergency Session
+            </button>
+          )}
+
           {error && (
-
             <div className="error">
-
               {error}
-
             </div>
-
           )}
 
         </section>
@@ -765,393 +496,25 @@ function App() {
         ==================================================== */}
 
         <section className="map-panel">
-
           <h2>
             Live Emergency Route
           </h2>
 
-          <MapContainer
-
-            center={
-              mapCenter
-            }
-
-            zoom={12}
-
-            style={{
-              height: "550px",
-              width: "100%"
-            }}
-
-          >
-
-            <MapFollower
-              ambulanceLocation={
-                ambulanceLocation
-              }
-            />
-
-
-            <TileLayer
-
-              attribution='&copy; OpenStreetMap contributors'
-
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-
-            />
-
-
-            {/* ==================================================
-                AMBULANCE
-            ================================================== */}
-
-            {ambulanceLocation && (
-
-              <Marker
-
-                position={[
-
-                  ambulanceLocation.latitude,
-
-                  ambulanceLocation.longitude
-
-                ]}
-
-              >
-
-                <Popup>
-
-                  🚑 <strong>
-                    Ambulance
-                  </strong>
-
-                  <br />
-
-                  ID:
-                  {" "}
-                  {ambulanceId}
-
-                  <br />
-
-                  Status:
-                  {" "}
-                  EN ROUTE
-
-                  <br />
-
-                  Latitude:
-                  {" "}
-                  {ambulanceLocation.latitude}
-
-                  <br />
-
-                  Longitude:
-                  {" "}
-                  {ambulanceLocation.longitude}
-
-                </Popup>
-
-              </Marker>
-
+          <MapView
+            ambulanceId={ambulanceId}
+            ambulanceLocation={ambulanceLocation}
+            hospital={hospital}
+            officer={assignedOfficer}
+            recommendedRoute={recommendedRoute}
+            alternativeRoutes={routes.filter(
+              (r) => r.route_id !== recommendedRoute?.route_id
             )}
-
-
-            {/* ==================================================
-                STARTING LOCATION
-            ================================================== */}
-
-            {!ambulanceLocation &&
-              startLatitude &&
-              startLongitude && (
-
-                <Marker
-
-                  position={[
-
-                    Number(
-                      startLatitude
-                    ),
-
-                    Number(
-                      startLongitude
-                    )
-
-                  ]}
-
-                >
-
-                  <Popup>
-
-                    🚑 <strong>
-                      Ambulance
-                    </strong>
-
-                    <br />
-
-                    ID:
-                    {" "}
-                    {ambulanceId}
-
-                    <br />
-
-                    Tracking:
-                    {" "}
-                    NOT STARTED
-
-                  </Popup>
-
-                </Marker>
-
-              )
-            }
-
-
-            {/* ==================================================
-                HOSPITAL
-            ================================================== */}
-
-            {hospital && (
-
-              <Marker
-
-                position={[
-
-                  Number(
-                    hospital.latitude
-                  ),
-
-                  Number(
-                    hospital.longitude
-                  )
-
-                ]}
-
-              >
-
-                <Popup>
-
-                  🏥 <strong>
-
-                    {
-                      hospital.hospital_name
-                    }
-
-                  </strong>
-
-                  <br />
-
-                  Status:
-                  {" "}
-
-                  {
-                    hospital.emergency_ready
-                      ? "READY"
-                      : "NOT READY"
-                  }
-
-                </Popup>
-
-              </Marker>
-
-            )}
-
-
-            {/* ==================================================
-                TRAFFIC OFFICER
-            ================================================== */}
-
-            {assignedTrafficPoint && (
-
-              <Marker
-
-                position={[
-
-                  Number(
-                    assignedTrafficPoint.latitude
-                  ),
-
-                  Number(
-                    assignedTrafficPoint.longitude
-                  )
-
-                ]}
-
-              >
-
-                <Popup>
-
-                  👮 <strong>
-                    Traffic Officer
-                  </strong>
-
-                  <br />
-
-                  Officer:
-                  {" "}
-                  {
-                    assignedOfficer.name
-                  }
-
-                  <br />
-
-                  Junction:
-                  {" "}
-                  {
-                    assignedOfficer.location
-                  }
-
-                  <br />
-
-                  🚦 Green Corridor:
-                  {" "}
-
-                  {
-                    assignedOfficer.corridor_active
-                      ? "ACTIVE"
-                      : "INACTIVE"
-                  }
-
-                </Popup>
-
-              </Marker>
-
-            )}
-
-
-            {/* ==================================================
-                ROUTES
-            ================================================== */}
-
-            {
-              routes.map(
-                (route) => {
-
-                  if (
-                    !route.geometry ||
-                    !route.geometry.coordinates
-                  ) {
-
-                    return null;
-
-                  }
-
-                  const positions =
-                    route.geometry.coordinates.map(
-                      (coordinate) => [
-
-                        coordinate[1],
-
-                        coordinate[0]
-
-                      ]
-                    );
-
-                  const isRecommended =
-
-                    recommendedRoute?.route_id ===
-                    route.route_id;
-
-                  const routeColor =
-                    getRouteColor(
-                      route.congestion
-                    );
-
-                  return (
-
-                    <Polyline
-
-                      key={
-                        route.route_id
-                      }
-
-                      positions={
-                        positions
-                      }
-
-                      pathOptions={{
-
-                        color:
-
-                          isRecommended
-                            ? "blue"
-                            : routeColor,
-
-                        weight:
-
-                          isRecommended
-                            ? 9
-                            : 5,
-
-                        opacity:
-
-                          isRecommended
-                            ? 1
-                            : 0.7
-
-                      }}
-
-                    />
-
-                  );
-
-                }
-
-              )
-
-            }
-
-          </MapContainer>
-
-
-          {/* ==================================================
-              MAP LEGEND
-          ================================================== */}
-
-          <div className="map-legend">
-
-            <div className="legend-title">
-              Traffic Conditions
-            </div>
-
-            <div>
-
-              <span className="legend-line green">
-              </span>
-
-              Low Traffic
-
-            </div>
-
-            <div>
-
-              <span className="legend-line orange">
-              </span>
-
-              Moderate Traffic
-
-            </div>
-
-            <div>
-
-              <span className="legend-line red">
-              </span>
-
-              Heavy Traffic
-
-            </div>
-
-            <div>
-
-              <span className="legend-line recommended">
-              </span>
-
-              AI Recommended
-
-            </div>
-
-          </div>
-
+            trackingStatus={trackingStatus}
+            startLatitude={startLatitude}
+            startLongitude={startLongitude}
+          />
         </section>
+
 
       </main>
 
