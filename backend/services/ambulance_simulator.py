@@ -19,7 +19,7 @@ async def simulate_ambulance_movement(
     if not route_geometry:
 
         print(
-            f"⚠️ No route geometry for {ambulance_id}"
+            f"[WARN] No route geometry for {ambulance_id}"
         )
 
         return
@@ -34,7 +34,7 @@ async def simulate_ambulance_movement(
     if not coordinates:
 
         print(
-            f"⚠️ No route coordinates for {ambulance_id}"
+            f"[WARN] No route coordinates for {ambulance_id}"
         )
 
         return
@@ -43,10 +43,10 @@ async def simulate_ambulance_movement(
     print()
     print("=" * 60)
     print(
-        f"🚑 Starting ambulance simulation: {ambulance_id}"
+        f"[SIM] Starting ambulance simulation: {ambulance_id}"
     )
     print(
-        f"🛣️ Route points available: {len(coordinates)}"
+        f"[ROUTE] Route points available: {len(coordinates)}"
     )
     print("=" * 60)
 
@@ -81,7 +81,7 @@ async def simulate_ambulance_movement(
         if tracking is None:
 
             print(
-                f"⚠️ Tracking stopped for {ambulance_id}"
+                f"[WARN] Tracking stopped for {ambulance_id}"
             )
 
             return
@@ -103,7 +103,7 @@ async def simulate_ambulance_movement(
 
 
         print(
-            f"🚑 {ambulance_id} → "
+            f"[AMBULANCE] {ambulance_id} -> "
             f"Lat: {latitude:.6f}, "
             f"Lon: {longitude:.6f}"
         )
@@ -135,6 +135,6 @@ async def simulate_ambulance_movement(
     print()
     print("=" * 60)
     print(
-        f"🏁 {ambulance_id} reached destination."
+        f"[DESTINATION] {ambulance_id} reached destination."
     )
     print("=" * 60)

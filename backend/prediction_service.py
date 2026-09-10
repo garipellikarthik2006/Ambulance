@@ -1,9 +1,11 @@
+import os
 import xgboost as xgb
 import joblib
 import pandas as pd
 
-MODEL_PATH = "ambulance_traffic_model.json"
-METADATA_PATH = "traffic_model_metadata.pkl"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "ambulance_traffic_model.json")
+METADATA_PATH = os.path.join(BASE_DIR, "traffic_model_metadata.pkl")
 
 
 # Create XGBoost model

@@ -1,8 +1,10 @@
+import os
 import sqlite3
 from datetime import datetime
 
 
-DATABASE_NAME = "traffic_history.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATABASE_NAME = os.path.abspath(os.path.join(BASE_DIR, "..", "traffic_history.db"))
 
 
 def get_connection():
